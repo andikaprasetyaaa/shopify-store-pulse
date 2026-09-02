@@ -1,4 +1,5 @@
 import type {
+    ChatMessage,
     ForecastMetric,
     PageName,
 } from "./types";
@@ -17,6 +18,16 @@ export interface DashboardState {
     forecastMetric: ForecastMetric;
     forecastHorizon: number;
     analystQuestion: string;
+
+    /**
+     * The analyst conversation.
+     *
+     * It lives here rather than inside the page module
+     * so that leaving for Inventory and coming back
+     * does not silently discard the thread: the page is
+     * re-rendered from scratch on every visit.
+     */
+    analystChat: ChatMessage[];
 }
 
 export const state: DashboardState = {
@@ -27,6 +38,7 @@ export const state: DashboardState = {
     forecastMetric: "orders",
     forecastHorizon: 7,
     analystQuestion: "",
+    analystChat: [],
 };
 
 export const descriptions: Record<
@@ -48,7 +60,7 @@ export const descriptions: Record<
         "Short-horizon demand forecast, scored against a seasonal naive benchmark.",
 
     analyst:
-        "Ask Gemini to explain the figures above. It reads the dashboard's own numbers and never computes new ones.",
+        "A conversation with Gemini about this store. It reads the dashboard's own numbers and never computes new ones.",
 
     data: "Inspect DuckDB synchronization and stored data coverage.",
 };

@@ -235,6 +235,17 @@ export interface AnalystContextSummary {
     order_end: string | null;
 }
 
+/**
+ * One earlier message in the conversation.
+ *
+ * `model` rather than `assistant`, because the value is
+ * passed through to Gemini unchanged.
+ */
+export interface AnalystTurn {
+    role: "user" | "model";
+    text: string;
+}
+
 export interface AnalystResponse {
     question: string;
     /** Null whenever `error` is set. */
@@ -242,5 +253,21 @@ export interface AnalystResponse {
     model: string | null;
     cached: boolean;
     error: string | null;
+    history_turns?: number;
     context_summary?: AnalystContextSummary;
+}
+
+/**
+ * A message as the transcript holds it.
+ *
+ * `pending` marks the placeholder shown while the model
+ * is thinking; `error` marks a turn that failed, which
+ * is rendered but never sent back as history.
+ */
+export interface ChatMessage {
+    role: "user" | "model";
+    text: string;
+    pending?: boolean;
+    error?: boolean;
+    meta?: string;
 }

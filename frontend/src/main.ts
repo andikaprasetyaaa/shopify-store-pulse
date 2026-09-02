@@ -93,6 +93,12 @@ async function loadPage(): Promise<void> {
 function setPage(page: PageName): void {
     state.page = page;
 
+    // The analyst is a conversation, not a report: it
+    // drops the hero and fills the window instead. CSS
+    // decides that from here, so no page has to know
+    // about another page's layout.
+    document.body.dataset["page"] = page;
+
     document
         .querySelectorAll<HTMLButtonElement>(
             ".nav-button",
@@ -233,6 +239,8 @@ requireElement("refresh").addEventListener(
         })();
     },
 );
+
+document.body.dataset["page"] = state.page;
 
 renderControls(loadPage);
 

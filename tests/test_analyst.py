@@ -169,6 +169,89 @@ def test_system_prompt_is_sent_as_system_instruction() -> None:
     )
 
 
+def test_history_becomes_earlier_contents_turns() -> None:
+    """
+    The conversation is what makes a follow-up
+    answerable, and Gemini only sees it if the earlier
+    turns are sent as `contents` ahead of the question.
+    """
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(
+            request.content.decode()
+        )
+
+        return httpx.Response(
+            200,
+            json=reply("ok"),
+        )
+
+    with GeminiClient(
+        make_config(),
+        http_client=transport(handler),
+    ) as client:
+        client.generate(
+            system_prompt="s",
+            user_prompt="why?",
+            history=[
+                {
+                    "role": "user",
+                    "text": "first question",
+                },
+                {
+                    "role": "model",
+                    "text": "first answer",
+                },
+            ],
+        )
+
+    contents = seen["body"]["contents"]
+
+    assert [turn["role"] for turn in contents] == [
+        "user",
+        "model",
+        "user",
+    ]
+
+    # The live question is last, so it is what the model
+    # is answering.
+    assert (
+        contents[-1]["parts"][0]["text"] == "why?"
+    )
+
+    assert (
+        contents[0]["parts"][0]["text"]
+        == "first question"
+    )
+
+
+def test_no_history_still_sends_a_single_turn() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(
+            request.content.decode()
+        )
+
+        return httpx.Response(
+            200,
+            json=reply("ok"),
+        )
+
+    with GeminiClient(
+        make_config(),
+        http_client=transport(handler),
+    ) as client:
+        client.generate(
+            system_prompt="s",
+            user_prompt="u",
+        )
+
+    assert len(seen["body"]["contents"]) == 1
+
+
 def test_404_names_the_model_setting() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={})

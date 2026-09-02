@@ -10,7 +10,7 @@ the dashboard has to keep working when GEMINI_API_KEY is
 absent.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -22,12 +22,35 @@ router = APIRouter(
 )
 
 
+class AnalystTurn(BaseModel):
+    """
+    One earlier message in the conversation.
+
+    The transcript lives in the browser, so it arrives
+    here as ordinary request input and is bounded like
+    any other: an unbounded history would let a single
+    request carry an arbitrarily large prompt to a
+    metered API.
+    """
+
+    role: Literal["user", "model"]
+
+    text: str = Field(
+        max_length=20000,
+    )
+
+
 class AnalystRequest(BaseModel):
     """One question, plus the slice to reason over."""
 
     question: str | None = Field(
         default=None,
         max_length=2000,
+    )
+
+    history: list[AnalystTurn] = Field(
+        default_factory=list,
+        max_length=40,
     )
 
     days: int = Field(
@@ -62,4 +85,8 @@ def ask(
         days=request.days,
         forecast_metric=request.forecast_metric,
         forecast_horizon=request.forecast_horizon,
+        history=[
+            turn.model_dump()
+            for turn in request.history
+        ],
     )

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Store Pulse</title>
+
+    <!--
+        Applied before first paint. The module bundle loads
+        after the document renders, so without this a reader
+        whose stored choice differs from their OS setting sees
+        the wrong theme flash first.
+    -->
+    <script>
+        try {
+            var t = localStorage.getItem(
+                "store-pulse-theme"
+            );
+
+            if (t === "light" || t === "dark") {
+                document.documentElement
+                    .setAttribute("data-theme", t);
+            }
+        } catch (e) {
+            /* Storage blocked: follow the OS. */
+        }
+    </script>
+</head>
+
+<body>
+
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="brand">
+
+            <div class="brand-eyebrow">
+                Shopify
+            </div>
+
+            <div class="brand-title">
+                Store Pulse
+            </div>
+
+        </div>
+
+        <nav class="nav">
+
+            <button
+                class="nav-button active"
+                data-page="overview"
+            >
+                Overview
+            </button>
+
+            <button
+                class="nav-button"
+                data-page="inventory"
+            >
+                Inventory
+            </button>
+
+            <button
+                class="nav-button"
+                data-page="funnel"
+            >
+                Funnel
+            </button>
+
+            <button
+                class="nav-button"
+                data-page="signals"
+            >
+                Signals
+            </button>
+
+            <button
+                class="nav-button"
+                data-page="forecast"
+            >
+                Forecast
+            </button>
+
+            <button
+                class="nav-button"
+                data-page="analyst"
+            >
+                Analyst
+            </button>
+
+            <button
+                class="nav-button"
+                data-page="data"
+            >
+                Data
+            </button>
+
+        </nav>
+
+        <div
+            id="controls"
+            class="sidebar-section"
+        ></div>
+
+        <div class="sidebar-section">
+
+            <label class="sidebar-label">
+                Appearance
+            </label>
+
+            <div
+                id="theme-switch"
+                class="theme-switch"
+                role="group"
+                aria-label="Colour theme"
+            >
+                <button
+                    type="button"
+                    class="theme-option"
+                    data-theme="light"
+                    aria-pressed="false"
+                >
+                    Light
+                </button>
+
+                <button
+                    type="button"
+                    class="theme-option"
+                    data-theme="dark"
+                    aria-pressed="false"
+                >
+                    Dark
+                </button>
+
+                <button
+                    type="button"
+                    class="theme-option"
+                    data-theme="system"
+                    aria-pressed="true"
+                >
+                    Auto
+                </button>
+            </div>
+
+            <button
+                id="refresh"
+                class="refresh"
+            >
+                Refresh dashboard
+            </button>
+
+            <div class="sidebar-small">
+                Refresh reads DuckDB again.
+                It does not call Shopify.
+            </div>
+
+        </div>
+
+    </aside>
+
+    <main class="main">
+
+        <section class="hero">
+
+            <div class="hero-eyebrow">
+                Commerce intelligence
+            </div>
+
+            <h1 id="page-title">
+                Overview
+            </h1>
+
+            <div
+                id="page-description"
+                class="hero-description"
+            >
+                Sales momentum, inventory health
+                and active anomaly signals.
+            </div>
+
+            <div
+                id="hero-chips"
+                class="chips"
+            ></div>
+
+        </section>
+
+        <section
+            id="content"
+            class="content"
+        >
+            <div class="loading">
+                Loading Store Pulse...
+            </div>
+        </section>
+
+    </main>
+
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+
+</body>
+</html>

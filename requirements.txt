@@ -1,0 +1,16 @@
+# Shopify/API foundation
+httpx>=0.28,<1
+python-dotenv>=1.0,<2
+pydantic>=2.10,<3
+tenacity>=9,<10
+
+# Data / analytics stack (used in later milestones)
+pandas>=2.2,<3
+duckdb>=1.2,<2
+
+# Dashboard stack (used later, not in Milestone 1)
+streamlit>=1.40,<2
+plotly>=6,<7
+
+# Testing
+pytest>=8,<9

@@ -1,6 +1,7 @@
 import type {
     AnalystResponse,
     AnalystStatus,
+    AnalystTurn,
     DataHealthResponse,
     ForecastMetric,
     ForecastResponse,
@@ -107,7 +108,8 @@ export function fetchAnalystStatus(): Promise<AnalystStatus> {
 }
 
 /**
- * Ask the analyst one question.
+ * Ask the analyst one question, with the conversation
+ * so far as context.
  *
  * A POST because the question is a body, and because
  * this is the one route in the app that costs money per
@@ -119,6 +121,7 @@ export async function askAnalyst(
     days: number,
     forecastMetric: ForecastMetric,
     forecastHorizon: number,
+    history: AnalystTurn[] = [],
 ): Promise<AnalystResponse> {
     const response = await fetch("/api/analyst", {
         method: "POST",
@@ -131,6 +134,7 @@ export async function askAnalyst(
             days,
             forecast_metric: forecastMetric,
             forecast_horizon: forecastHorizon,
+            history,
         }),
     });
 

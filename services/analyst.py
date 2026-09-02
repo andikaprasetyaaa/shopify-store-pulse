@@ -23,6 +23,7 @@ from typing import Any
 from analyst.client import (
     AnalystError,
     GeminiClient,
+    Turn,
 )
 from analyst.config import (
     AnalystConfigError,
@@ -45,6 +46,11 @@ from services.signals import build_signals
 RISK_SAMPLE = 15
 
 CACHE_TTL_SECONDS = 300
+
+# How much conversation travels with a question. Older
+# turns are dropped from the front, so a long session
+# keeps its recent thread rather than being refused.
+MAX_HISTORY_TURNS = 20
 
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
@@ -190,6 +196,8 @@ def _anomaly_caveat(
 def build_user_prompt(
     question: str,
     context: dict[str, Any],
+    *,
+    follow_up: bool = False,
 ) -> str:
     """
     The user turn: the question, then the data.
@@ -198,7 +206,41 @@ def build_user_prompt(
     here as well as in the system prompt, because it is
     the single rule most worth reinforcing next to the
     numbers themselves.
+
+    `follow_up` marks a question asked inside an ongoing
+    conversation. It swaps the six-heading instruction
+    for one asking the model to answer directly, because
+    a full structured report in reply to "why?" is the
+    fastest way to make a chat unreadable. The data
+    still travels with every turn: it is the only copy
+    the model is allowed to cite, and it may have been
+    refreshed by a sync since the previous answer.
     """
+
+    if follow_up:
+        shape = (
+            "This is a follow-up in an ongoing "
+            "conversation. Answer it directly and "
+            "briefly - a sentence or a short "
+            "paragraph. Do not use the six report "
+            "headings and do not restate the whole "
+            "analysis. Keep labelling claims OBSERVED, "
+            "FORECAST or INFERENCE.\n"
+        )
+
+    else:
+        shape = (
+            "Structure your answer with these six "
+            "headings, in this order:\n"
+            + "\n".join(
+                f"{index}. {name}"
+                for index, name in enumerate(
+                    SECTIONS,
+                    start=1,
+                )
+            )
+            + "\n"
+        )
 
     return (
         f"Question: {question}\n\n"
@@ -206,16 +248,8 @@ def build_user_prompt(
         "compute new metrics and do not alter the "
         "forecast values. If the data does not support "
         "an answer, say so explicitly.\n\n"
-        "Structure your answer with these six "
-        "headings, in this order:\n"
-        + "\n".join(
-            f"{index}. {name}"
-            for index, name in enumerate(
-                SECTIONS,
-                start=1,
-            )
-        )
-        + "\n\nDATA (JSON):\n"
+        + shape
+        + "\nDATA (JSON):\n"
         + json.dumps(
             context,
             indent=2,
@@ -224,14 +258,74 @@ def build_user_prompt(
     )
 
 
+def normalize_history(
+    history: Any,
+) -> list[Turn]:
+    """
+    Coerce whatever the client sent into clean turns.
+
+    The transcript arrives from the browser rather than
+    from the server's own memory, so it is treated as
+    input: unknown roles and empty text are dropped, and
+    only the most recent turns survive.
+    """
+
+    if not isinstance(history, list):
+        return []
+
+    turns: list[Turn] = []
+
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+
+        role = item.get("role")
+
+        text = item.get("text")
+
+        if role not in ("user", "model"):
+            continue
+
+        if not isinstance(text, str):
+            continue
+
+        cleaned = text.strip()
+
+        if not cleaned:
+            continue
+
+        turns.append(
+            {
+                "role": role,
+                "text": cleaned,
+            }
+        )
+
+    return turns[-MAX_HISTORY_TURNS:]
+
+
 def _cache_key(
     question: str,
     context: dict[str, Any],
     model_name: str,
+    history: list[Turn],
 ) -> str:
+    """
+    One key per (model, question, data, conversation).
+
+    History is part of the key because the same words
+    mean different things at different points in a
+    conversation: "why?" after the revenue answer and
+    "why?" after the stock answer are not the same
+    question, and must not share a cached reply.
+    """
+
     digest = hashlib.sha256(
         json.dumps(
-            context,
+            {
+                "context": context,
+                "history": history,
+            },
             sort_keys=True,
             default=str,
         ).encode("utf-8")
@@ -246,19 +340,29 @@ def analyse(
     days: int = 30,
     forecast_metric: str = "orders",
     forecast_horizon: int = 7,
+    history: Any = None,
     client: GeminiClient | None = None,
     use_cache: bool = True,
 ) -> dict[str, Any]:
     """
     Answer one question about the current store state.
 
-    Identical questions over identical data are served
-    from a short-lived cache: the dashboard's refresh
-    button would otherwise bill a fresh generation for
-    an answer that cannot have changed.
+    `history` is the conversation so far. When it is
+    non-empty the question is treated as a follow-up:
+    the earlier turns are sent ahead of it, and the
+    model is asked for a direct answer rather than
+    another six-part report.
+
+    Identical questions over identical data and the same
+    conversation are served from a short-lived cache: the
+    dashboard's refresh button would otherwise bill a
+    fresh generation for an answer that cannot have
+    changed.
     """
 
     asked = (question or "").strip() or DEFAULT_QUESTION
+
+    turns = normalize_history(history)
 
     try:
         config = GeminiConfig.from_env()
@@ -282,6 +386,7 @@ def analyse(
         asked,
         context,
         config.model_name,
+        turns,
     )
 
     now = time.monotonic()
@@ -302,7 +407,9 @@ def analyse(
             user_prompt=build_user_prompt(
                 asked,
                 context,
+                follow_up=bool(turns),
             ),
+            history=turns,
         )
 
     except AnalystError as exc:
@@ -324,6 +431,7 @@ def analyse(
         "model": config.model_name,
         "cached": False,
         "error": None,
+        "history_turns": len(turns),
         "context_summary": {
             "reporting_window_days": days,
             "forecast_metric": forecast_metric,

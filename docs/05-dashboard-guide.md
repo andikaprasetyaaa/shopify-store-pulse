@@ -308,23 +308,48 @@ prediction is the model telling you it does not really know.
 
 ## Page 6 · Analyst
 
-> *"Ask Gemini to explain the figures above. It reads the dashboard's own
-> numbers and never computes new ones."*
+> *"A conversation with Gemini about this store. It reads the dashboard's
+> own numbers and never computes new ones."*
+
+This is the one page that drops the hero header and fills the window: a
+conversation whose composer scrolls off the screen is not usable. The
+sidebar stays, because switching pages and changing the reporting window
+are both still part of using it.
 
 **Sidebar filter:** the same **Reporting window** as Overview — because
 that window decides what data is sent to the model.
 
 | Element | Meaning |
 | --- | --- |
-| **Ask about this data** | The question box. Placeholder: *"e.g. why did orders fall yesterday?"* |
-| **Preset buttons** | Four ready-made questions: **Explain current state**, **Biggest risk**, **Read the forecast**, **Inventory exposure**. |
-| **Ask the analyst** | Sends the question. Turns into **Thinking…** while waiting. |
-| Status line while waiting | *"Reading the dashboard's numbers and asking `model`…"* |
-| Line under the answer | `model · N-day window · orders through DATE`, plus **· cached** when the answer came from cache. |
+| **Store Pulse Analyst** (top bar) | The conversation header. Under it: the model, the reporting window, and the last order date the answers are based on. |
+| **New chat** | Clears the conversation and starts fresh. The model then has no memory of what came before. |
+| **Preset buttons** | Four openers on the empty screen: **Explain current state**, **Biggest risk**, **Read the forecast**, **Inventory exposure**. |
+| **Composer** | The question box. Enter sends, Shift+Enter adds a line. It grows with your question up to a ceiling, then scrolls. |
+| Three animated dots | The model is thinking. They occupy the place the answer will appear, so nothing jumps when the text arrives. |
+| Line under an answer | **cached** when it was served from cache, and **with N earlier turns** when the model was given the conversation so far. |
 
-### The answer structure
+### The conversation has a memory
 
-The reply always follows six headings, enforced by the system prompt:
+The transcript is sent back with every question, so follow-ups work:
+ask *"why?"*, *"which product?"* or *"say more"* and the model knows what
+you are referring to.
+
+Three things follow from how that is implemented:
+
+- **The browser holds the conversation, not the server.** The API is
+  stateless. Reloading the page starts a new conversation; switching to
+  Inventory and back does not.
+- **Only the last 20 turns travel.** A long session keeps its recent
+  thread rather than being refused.
+- **The data snapshot rides on every question, but only once.** Earlier
+  turns carry their text alone. Repeating a 30 kB JSON block on each turn
+  would cost more with every question and hand the model several stale
+  copies of the same figures.
+
+### The answer changes shape with the question
+
+A substantial question — the openers above, or the first question of a
+conversation — gets the full six-heading report:
 
 | Heading | Content |
 | --- | --- |
@@ -334,6 +359,11 @@ The reply always follows six headings, enforced by the system prompt:
 | **Forecast** | The supplied forecast and its uncertainty — values are never altered. |
 | **Priority** | What deserves attention first. |
 | **Recommended investigation** | What to inspect next. Analysis only, never a change to Shopify. |
+
+A short follow-up gets a short answer instead: a sentence or a paragraph,
+no headings, no restatement of the whole analysis. The discipline is
+unchanged — no invented numbers, no altered forecasts, and claims still
+labelled. Only the length adapts.
 
 ### Three labels the model uses
 

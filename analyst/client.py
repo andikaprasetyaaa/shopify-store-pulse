@@ -11,7 +11,8 @@ and because the query-parameter form was observed to
 answer 404 for this model while the header form works.
 """
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, Literal, TypedDict
 
 import httpx
 from tenacity import (
@@ -22,6 +23,19 @@ from tenacity import (
 )
 
 from analyst.config import GeminiConfig
+
+
+class Turn(TypedDict):
+    """
+    One completed exchange in the conversation.
+
+    `role` uses Gemini's own vocabulary - "user" and
+    "model" - so a turn can be handed to the API without
+    translation.
+    """
+
+    role: Literal["user", "model"]
+    text: str
 
 
 class AnalystError(RuntimeError):
@@ -37,7 +51,7 @@ class _RetryableAnalystError(AnalystError):
 
 
 class GeminiClient:
-    """One-shot text generation against Gemini."""
+    """Text generation against Gemini, with or without history."""
 
     def __init__(
         self,
@@ -74,16 +88,44 @@ class GeminiClient:
         *,
         system_prompt: str,
         user_prompt: str,
+        history: Sequence[Turn] | None = None,
         temperature: float = 0.2,
         max_output_tokens: int = 4096,
     ) -> str:
         """
         Return the model's text for one prompt.
 
+        `history` is the conversation so far, oldest
+        first, and is sent ahead of `user_prompt` as
+        earlier turns. Only the final turn carries the
+        data snapshot: repeating a 30 kB JSON block on
+        every turn would cost more with each question
+        and give the model several stale copies of the
+        same figures to choose between.
+
         Temperature is low by default: this assistant
         explains supplied numbers, and creativity in
         that job shows up as invention.
         """
+
+        contents: list[dict[str, Any]] = [
+            {
+                "role": turn["role"],
+                "parts": [
+                    {"text": turn["text"]},
+                ],
+            }
+            for turn in (history or ())
+        ]
+
+        contents.append(
+            {
+                "role": "user",
+                "parts": [
+                    {"text": user_prompt},
+                ],
+            }
+        )
 
         payload: dict[str, Any] = {
             "system_instruction": {
@@ -91,14 +133,7 @@ class GeminiClient:
                     {"text": system_prompt},
                 ],
             },
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": user_prompt},
-                    ],
-                },
-            ],
+            "contents": contents,
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_output_tokens,

@@ -65,9 +65,26 @@ model to:
 - Prefer 7-day forecasts over long projections.
 - Never modify the supplied forecast values.
 
+### Two answer shapes
+
+The prompt asks the model to match its answer to the question. A
+substantial analytical question — or the opening question of a
+conversation — gets the full structured report below. A short follow-up
+inside an ongoing conversation (*"why?"*, *"is that bad?"*, *"which
+product?"*) gets a direct answer of a sentence or a short paragraph, with
+no headings and no restatement of the analysis.
+
+Only the length adapts. Every prohibition above still applies to a
+follow-up, and claims are still labelled OBSERVED / FORECAST /
+INFERENCE.
+
+`services/analyst.py` reinforces this next to the data: when the request
+carries a conversation, `build_user_prompt(..., follow_up=True)` swaps
+the six-heading instruction for one asking for a direct answer.
+
 ### The six sections
 
-Every answer follows this structure, and a test asserts that the
+The structured report follows this order, and a test asserts that the
 frontend's headings still match the prompt text:
 
 | # | Section | Purpose |
@@ -111,6 +128,35 @@ alone cannot.
 
 ---
 
+## The conversation
+
+The feature is multi-turn, and the design has one unusual property worth
+stating plainly: **the server keeps no session.** The browser holds the
+transcript and posts it back with every question.
+
+| Concern | How it is handled |
+| --- | --- |
+| **Where it lives** | `state.analystChat` in the frontend. Leaving for another page and returning keeps the thread; reloading starts a new one. |
+| **How it reaches Gemini** | `GeminiClient.generate(history=...)` sends earlier turns as `contents` ahead of the question. |
+| **Which turns are sent** | Completed ones only. A pending placeholder or a failed turn is never sent back — it would teach the model that an error was part of the conversation. |
+| **How much is sent** | The last 20 turns (`MAX_HISTORY_TURNS`). The route caps a request at 40 messages of 20,000 characters each. |
+| **Where the data goes** | On the current turn only. Earlier turns carry their text alone. |
+| **Trust** | The transcript arrives from the browser, so it is treated as input: `normalize_history()` drops unknown roles, non-string text and empty messages, and the route rejects an unknown role with a 422. |
+
+### Why the data is not repeated on every turn
+
+Attaching the full context JSON to each turn would make a conversation
+cost more with every question, and would hand the model several
+increasingly stale copies of the same figures to choose between. Sending
+it once, on the live question, keeps the cost flat and leaves exactly one
+set of numbers the model may cite — which is the whole premise of the
+feature.
+
+The trade-off: the model's memory of earlier turns is its own prose, not
+the data those answers were computed from. That is the correct
+arrangement here, since it is forbidden from recomputing anything
+anyway.
+
 ## Engineering details
 
 ### API key handling
@@ -122,10 +168,15 @@ header form works.
 
 ### Caching
 
-Identical questions over identical data are served from a 5-minute
-in-memory cache (`CACHE_TTL_SECONDS = 300`), keyed by a hash of the
-question and the context. Pressing the button twice does not bill twice.
-Cached answers are labelled **· cached** in the UI.
+Identical questions over identical data **in the same conversation** are
+served from a 5-minute in-memory cache (`CACHE_TTL_SECONDS = 300`), keyed
+by a hash of the question, the context and the history. Asking the same
+thing twice does not bill twice. Cached answers are labelled **cached**
+under the reply.
+
+History is part of the key on purpose: *"why?"* after the revenue answer
+and *"why?"* after the stock answer are not the same question, and must
+not share a cached reply.
 
 ### Output safety
 
